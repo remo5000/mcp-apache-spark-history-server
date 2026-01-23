@@ -30,21 +30,22 @@ Transform your Spark infrastructure monitoring with AI! This Model Context Proto
 
 ```mermaid
 graph TB
-    A[🤖 AI Agent/LLM] --> F[📡 MCP Client]
-    B[🦙 LlamaIndex Agent] --> F
-    C[🌐 LangGraph] --> F
-    D[�️ Claudep Desktop] --> F
-    E[🛠️ Amazon Q CLI] --> F
+    A[🤖 AI Agent/LLM] --> G[📡 MCP Client]
+    B[🦙 LlamaIndex Agent] --> G
+    C[🌐 LangGraph] --> G
+    D[💻 Claude Code] --> G
+    E[🖥️ Claude Desktop] --> G
+    F[🛠️ Amazon Q CLI] --> G
 
-    F --> G[⚡ Spark History MCP Server]
+    G --> H[⚡ Spark History MCP Server]
 
-    G --> H[🔥 Prod Spark History Server]
-    G --> I[🔥 Staging Spark History Server]
-    G --> J[🔥 Dev Spark History Server]
+    H --> I[🔥 Prod Spark History Server]
+    H --> J[🔥 Staging Spark History Server]
+    H --> K[🔥 Dev Spark History Server]
 
-    H --> K[📄 Prod Event Logs]
-    I --> L[📄 Staging Event Logs]
-    J --> M[📄 Dev Event Logs]
+    I --> L[📄 Prod Event Logs]
+    J --> M[📄 Staging Event Logs]
+    K --> N[📄 Dev Event Logs]
 ```
 
 **🔗 Components:**
@@ -307,6 +308,38 @@ SHS_SERVERS_*_INCLUDE_PLAN_DESCRIPTION - Whether to include SQL execution plans 
 ```
 
 ## 🤖 AI Agent Integration
+
+### Claude Code Setup
+
+1. **Install the package:**
+```bash
+pip install mcp-apache-spark-history-server
+```
+
+2. **Create config file** at `~/.claude/spark-history-mcp.yaml`:
+```yaml
+servers:
+  production:
+    default: true
+    url: "http://your-spark-history-server:18080"
+```
+
+3. **Add to `~/.mcp.json`:**
+```json
+{
+  "mcpServers": {
+    "spark-history": {
+      "command": "python",
+      "args": ["-m", "spark_history_mcp.core.main"],
+      "env": {
+        "SHS_MCP_CONFIG": "/path/to/.claude/spark-history-mcp.yaml"
+      }
+    }
+  }
+}
+```
+
+4. **Restart Claude Code** - you'll be prompted to approve the server on first use.
 
 ### Quick Start Options
 

@@ -45,6 +45,47 @@ def get_client_or_default(
 
 
 @mcp.tool()
+def list_servers() -> List[Dict[str, Any]]:
+    """
+    List all configured Spark History servers.
+
+    Returns safe (non-sensitive) information about each server including
+    name, URL, type, and connection settings. Authentication credentials
+    are never exposed.
+
+    Returns:
+        List of server configurations with name, url, type, and settings
+    """
+    ctx = mcp.get_context()
+    config = ctx.request_context.lifespan_context.config
+
+    servers = []
+    for name, server_config in config.servers.items():
+        server_info: Dict[str, Any] = {
+            "name": name,
+            "url": server_config.url,
+            "default": server_config.default,
+            "verify_ssl": server_config.verify_ssl,
+            "timeout": server_config.timeout,
+        }
+
+        if server_config.emr_serverless_application_id:
+            server_info["type"] = "emr_serverless"
+            server_info["emr_serverless_application_id"] = (
+                server_config.emr_serverless_application_id
+            )
+        elif server_config.emr_cluster_arn:
+            server_info["type"] = "emr_ec2"
+            server_info["emr_cluster_arn"] = server_config.emr_cluster_arn
+        else:
+            server_info["type"] = "spark_history_server"
+
+        servers.append(server_info)
+
+    return servers
+
+
+@mcp.tool()
 def list_applications(
     server: Optional[str] = None,
     status: Optional[list[str]] = None,

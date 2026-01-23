@@ -35,6 +35,10 @@ servers:
   # Amazon EMR-EC2 Spark History Server example
 #    emr_cluster_arn: "<EMR Cluster ARN>"
 
+  # Amazon EMR Serverless
+  # my-emr-serverless-application:
+  #   emr_serverless_application_id: "00g1abc123xyz"  # Just the application ID, not the full ARN
+
 mcp:
   transports:
     - streamable-http # streamable-http or stdio. you can only specify one right now.
@@ -78,4 +82,5 @@ mcp:
 # SHS_SERVERS_*_AUTH_PASSWORD - Password for a specific server
 # SHS_SERVERS_*_AUTH_TOKEN - Token for a specific server
 # SHS_SERVERS_*_VERIFY_SSL - Whether to verify SSL for a specific server (true/false)
-# SHS_SERVERS_*_EMR_CLUSTER_ARN - EMR cluster ARN for a specific server
+# SHS_SERVERS_*_EMR_CLUSTER_ARN - EMR on EC2 cluster ARN for a specific server
+# SHS_SERVERS_*_EMR_SERVERLESS_APPLICATION_ID - EMR Serverless application ID

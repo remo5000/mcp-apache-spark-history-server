@@ -15,6 +15,7 @@ from spark_history_mcp.core.client_context import ClientContext
 @dataclass
 class AppContext:
     clients: ClientContext
+    config: Config
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -30,7 +31,7 @@ class DateTimeEncoder(json.JSONEncoder):
 async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Config() automatically loads from SHS_MCP_CONFIG env var (set in main.py)
     config = Config()
-    yield AppContext(clients=ClientContext(config))
+    yield AppContext(clients=ClientContext(config), config=config)
 
 
 def run(config: Config):

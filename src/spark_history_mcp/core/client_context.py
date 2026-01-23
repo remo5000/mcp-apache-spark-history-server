@@ -10,6 +10,7 @@ import time
 from typing import Dict, Iterator, List, Optional, Protocol, Tuple
 
 from spark_history_mcp.api.emr_persistent_ui_client import EMRPersistentUIClient
+from spark_history_mcp.api.emr_serverless_client import EMRServerlessClient
 from spark_history_mcp.api.spark_client import SparkRestClient
 from spark_history_mcp.config.config import Config
 
@@ -51,7 +52,9 @@ class ClientContext:
         self._default_server: Optional[str] = None
         self._static_servers: Dict[str, SparkRestClient] = {}
         self._ephemeral_providers: Dict[str, EphemeralClientProvider] = {}
-        self._app_cache: Dict[str, Dict] = {}  # app_id -> {"server": str, "last_updated": float}
+        self._app_cache: Dict[
+            str, Dict
+        ] = {}  # app_id -> {"server": str, "last_updated": float}
         self._cache_ttl: int = cache_ttl
 
         for name, server_config in config.servers.items():
@@ -155,6 +158,7 @@ class ClientContext:
                     }
                     return client
                 except Exception:
+                    logger.debug("App %s not found on server %s", app_id, name)
                     continue
 
         raise ValueError(f"Server '{server_name}' not found")
@@ -225,7 +229,10 @@ class ClientContext:
                 )
 
         if server_name:
-            if server_name not in self._static_servers and server_name not in self._ephemeral_providers:
+            if (
+                server_name not in self._static_servers
+                and server_name not in self._ephemeral_providers
+            ):
                 raise ValueError(f"Server '{server_name}' not found")
             yield from yield_from_server(server_name)
         else:
