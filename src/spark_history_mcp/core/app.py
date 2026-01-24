@@ -4,23 +4,17 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from spark_history_mcp.api.emr_persistent_ui_client import EMRPersistentUIClient
-from spark_history_mcp.api.spark_client import SparkRestClient
 from spark_history_mcp.config.config import Config
-
-from ..utils.utils import ApplicationDiscovery
+from spark_history_mcp.core.client_context import ClientContext
 
 
 @dataclass
 class AppContext:
-    clients: dict[str, SparkRestClient]
-    default_client: Optional[SparkRestClient] = None
-    app_discovery: Optional[ApplicationDiscovery] = None
+    clients: ClientContext
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -36,39 +30,7 @@ class DateTimeEncoder(json.JSONEncoder):
 async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Config() automatically loads from SHS_MCP_CONFIG env var (set in main.py)
     config = Config()
-
-    clients: dict[str, SparkRestClient] = {}
-    default_client = None
-
-    for name, server_config in config.servers.items():
-        # Check if this is an EMR server configuration
-        if server_config.emr_cluster_arn:
-            # Create EMR client
-            emr_client = EMRPersistentUIClient(server_config)
-
-            # Initialize EMR client (create persistent UI, get presigned URL, setup session)
-            base_url, session = emr_client.initialize()
-
-            # Create a modified server config with the base URL
-            emr_server_config = server_config.model_copy()
-            emr_server_config.url = base_url
-
-            # Create SparkRestClient with the session
-            spark_client = SparkRestClient(emr_server_config)
-            spark_client.session = session  # Use the authenticated session
-
-            clients[name] = spark_client
-        else:
-            # Regular Spark REST client
-            clients[name] = SparkRestClient(server_config)
-
-        if server_config.default:
-            default_client = clients[name]
-
-    app_discovery = ApplicationDiscovery(clients)
-    yield AppContext(
-        clients=clients, default_client=default_client, app_discovery=app_discovery
-    )
+    yield AppContext(clients=ClientContext(config))
 
 
 def run(config: Config):

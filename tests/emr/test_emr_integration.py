@@ -62,7 +62,7 @@ class TestEMRIntegration(unittest.TestCase):
         mock_session.get.assert_called_once()
         self.assertEqual(apps, [])
 
-    @patch("spark_history_mcp.core.app.EMRPersistentUIClient")
+    @patch("spark_history_mcp.core.client_context.EMRPersistentUIClient")
     @patch("spark_history_mcp.core.app.Config")
     def test_app_lifespan_with_emr_config(
         self, mock_config_class, mock_emr_client_class
@@ -108,9 +108,9 @@ class TestEMRIntegration(unittest.TestCase):
                 )
                 mock_emr_client.initialize.assert_called_once()
 
-                # Verify context has clients
-                self.assertIn("emr", context.clients)
-                self.assertEqual(context.default_client, context.clients["emr"])
+                # Verify context has ClientContext with the "emr" server
+                self.assertIn("emr", context.clients._static_servers)
+                self.assertEqual(context.clients._default_server, "emr")
 
         # Run the async test
         try:

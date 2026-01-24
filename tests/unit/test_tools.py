@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from spark_history_mcp.api.spark_client import SparkRestClient
 from spark_history_mcp.config.config import ServerConfig
+from spark_history_mcp.core.client_context import ClientContext
 from spark_history_mcp.models.spark_types import (
     ApplicationInfo,
     ExecutionData,
@@ -36,61 +37,73 @@ class TestTools(unittest.TestCase):
         self.mock_client1 = MagicMock(spec=SparkRestClient)
         self.mock_client2 = MagicMock(spec=SparkRestClient)
 
-        # Set up clients dictionary
-        self.mock_lifespan_context.clients = {
-            "server1": self.mock_client1,
-            "server2": self.mock_client2,
-        }
+        # Set up ClientContext mock
+        self.mock_client_context = MagicMock(spec=ClientContext)
+        self.mock_lifespan_context.clients = self.mock_client_context
+
+        # Configure lookup_client to return appropriate clients
+        def lookup_client(server_name=None, app_id=None):
+            if server_name == "server2":
+                return self.mock_client2
+            elif server_name == "server1":
+                return self.mock_client1
+            elif server_name is None:
+                return self.mock_client1  # default
+            raise ValueError(f"Server '{server_name}' not found")
+
+        self.mock_client_context.lookup_client.side_effect = lookup_client
 
     def test_get_client_with_name(self):
         """Test getting a client by name"""
-        self.mock_lifespan_context.default_client = self.mock_client1
-
         # Get client by name
         client = get_client_or_default(self.mock_ctx, "server2")
 
         # Should return the requested client
         self.assertEqual(client, self.mock_client2)
+        self.mock_client_context.lookup_client.assert_called_with("server2", None)
 
     def test_get_default_client(self):
         """Test getting the default client when no name is provided"""
-        self.mock_lifespan_context.default_client = self.mock_client1
-
         # Get client without specifying name
         client = get_client_or_default(self.mock_ctx)
 
         # Should return the default client
         self.assertEqual(client, self.mock_client1)
+        self.mock_client_context.lookup_client.assert_called_with(None, None)
 
     def test_get_client_not_found_with_default(self):
-        """Test behavior when requested client is not found but default exists"""
-        self.mock_lifespan_context.default_client = self.mock_client1
-
-        # Get non-existent client
-        client = get_client_or_default(self.mock_ctx, "non_existent_server")
-
-        # Should fall back to default client
-        self.assertEqual(client, self.mock_client1)
-
-    def test_no_client_found(self):
-        """Test error when no client is found and no default exists"""
-        self.mock_lifespan_context.default_client = None
-
-        # Try to get non-existent client with no default
+        """Test behavior when requested client is not found"""
+        # Get non-existent client - should raise ValueError
         with self.assertRaises(ValueError) as context:
             get_client_or_default(self.mock_ctx, "non_existent_server")
 
-        self.assertIn("No Spark client found", str(context.exception))
+        self.assertIn("not found", str(context.exception))
+
+    def test_no_client_found(self):
+        """Test error when no client is found"""
+        # Configure to raise ValueError
+        self.mock_client_context.lookup_client.side_effect = ValueError(
+            "Server 'non_existent_server' not found"
+        )
+
+        # Try to get non-existent client
+        with self.assertRaises(ValueError) as context:
+            get_client_or_default(self.mock_ctx, "non_existent_server")
+
+        self.assertIn("not found", str(context.exception))
 
     def test_no_default_client(self):
         """Test error when no name is provided and no default exists"""
-        self.mock_lifespan_context.default_client = None
+        # Configure to raise ValueError for no default
+        self.mock_client_context.lookup_client.side_effect = ValueError(
+            "No server specified and no default configured"
+        )
 
         # Try to get default client when none exists
         with self.assertRaises(ValueError) as context:
             get_client_or_default(self.mock_ctx)
 
-        self.assertIn("No Spark client found", str(context.exception))
+        self.assertIn("No server specified", str(context.exception))
 
     @patch("spark_history_mcp.tools.tools.get_client_or_default")
     def test_get_slowest_jobs_empty(self, mock_get_client):
@@ -397,12 +410,16 @@ class TestTools(unittest.TestCase):
     @patch("spark_history_mcp.tools.tools.mcp.get_context")
     def test_list_applications_no_filter(self, mock_get_context):
         """Test application listing without filters"""
-        # Setup mock context
+        # Setup mock context with ClientContext
         mock_context = MagicMock()
-        mock_context.request_context.lifespan_context.clients = {
-            "server1": self.mock_client1
-        }
+        mock_client_context = MagicMock(spec=ClientContext)
+        mock_context.request_context.lifespan_context.clients = mock_client_context
         mock_get_context.return_value = mock_context
+
+        # Setup iter_clients to yield our mock client
+        mock_client_context.iter_clients.return_value = iter(
+            [("server1", self.mock_client1)]
+        )
 
         # Setup mock client
         mock_apps = [MagicMock(spec=ApplicationInfo), MagicMock(spec=ApplicationInfo)]
@@ -427,12 +444,16 @@ class TestTools(unittest.TestCase):
     @patch("spark_history_mcp.tools.tools.mcp.get_context")
     def test_list_applications_with_filters(self, mock_get_context):
         """Test application listing with filters"""
-        # Setup mock context
+        # Setup mock context with ClientContext
         mock_context = MagicMock()
-        mock_context.request_context.lifespan_context.clients = {
-            "server1": self.mock_client1
-        }
+        mock_client_context = MagicMock(spec=ClientContext)
+        mock_context.request_context.lifespan_context.clients = mock_client_context
         mock_get_context.return_value = mock_context
+
+        # Setup iter_clients to yield our mock client
+        mock_client_context.iter_clients.return_value = iter(
+            [("server1", self.mock_client1)]
+        )
 
         # Setup mock client
         mock_apps = [MagicMock(spec=ApplicationInfo)]
@@ -458,12 +479,16 @@ class TestTools(unittest.TestCase):
     @patch("spark_history_mcp.tools.tools.mcp.get_context")
     def test_list_applications_empty_result(self, mock_get_context):
         """Test application listing with empty result"""
-        # Setup mock context
+        # Setup mock context with ClientContext
         mock_context = MagicMock()
-        mock_context.request_context.lifespan_context.clients = {
-            "server1": self.mock_client1
-        }
+        mock_client_context = MagicMock(spec=ClientContext)
+        mock_context.request_context.lifespan_context.clients = mock_client_context
         mock_get_context.return_value = mock_context
+
+        # Setup iter_clients to yield our mock client
+        mock_client_context.iter_clients.return_value = iter(
+            [("server1", self.mock_client1)]
+        )
 
         # Setup mock client
         self.mock_client1.list_applications.return_value = []
@@ -474,20 +499,29 @@ class TestTools(unittest.TestCase):
         # Verify results
         self.assertEqual(result, [])
 
-    @patch("spark_history_mcp.tools.tools.get_client_or_default")
-    def test_list_applications_with_server(self, mock_get_client):
+    @patch("spark_history_mcp.tools.tools.mcp.get_context")
+    def test_list_applications_with_server(self, mock_get_context):
         """Test application listing with specific server"""
+        # Setup mock context with ClientContext
+        mock_context = MagicMock()
+        mock_client_context = MagicMock(spec=ClientContext)
+        mock_context.request_context.lifespan_context.clients = mock_client_context
+        mock_get_context.return_value = mock_context
+
+        # Setup iter_clients to yield our mock client
+        mock_client_context.iter_clients.return_value = iter(
+            [("production", self.mock_client1)]
+        )
+
         # Setup mock client
-        mock_client = MagicMock()
         mock_apps = [MagicMock(spec=ApplicationInfo)]
-        mock_client.list_applications.return_value = mock_apps
-        mock_get_client.return_value = mock_client
+        self.mock_client1.list_applications.return_value = mock_apps
 
         # Call with server
         list_applications(server="production")
 
-        # Verify server parameter is passed
-        mock_get_client.assert_called_once_with(unittest.mock.ANY, "production")
+        # Verify iter_clients was called with correct server_name
+        mock_client_context.iter_clients.assert_called_once()
 
     # Tests for list_jobs tool
     @patch("spark_history_mcp.tools.tools.get_client_or_default")

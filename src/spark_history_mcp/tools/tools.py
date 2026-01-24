@@ -40,27 +40,8 @@ def get_client_or_default(
     Raises:
         ValueError: If no client is found
     """
-    app_discovery = ctx.request_context.lifespan_context.app_discovery
-    default_client = ctx.request_context.lifespan_context.default_client
-
-    # If app_id provided, use discovery
-    if app_id and not server_name:
-        client, _ = app_discovery.get_client_for_app(app_id, server_name)
-        return client
-
-    clients = ctx.request_context.lifespan_context.clients
-
-    if server_name:
-        client = clients.get(server_name)
-        if client:
-            return client
-
-    if default_client:
-        return default_client
-
-    raise ValueError(
-        "No Spark client found. Please specify a valid server name or set a default server."
-    )
+    client_context = ctx.request_context.lifespan_context.clients
+    return client_context.lookup_client(server_name, app_id)
 
 
 @mcp.tool()
@@ -93,41 +74,35 @@ def list_applications(
         List of ApplicationInfo objects for all applications
     """
     ctx = mcp.get_context()
+    client_context = ctx.request_context.lifespan_context.clients
 
-    if server:
-        # Return from specific server
-        client = get_client_or_default(ctx, server)
-        return client.list_applications(
-            status=status,
-            min_date=min_date,
-            max_date=max_date,
-            min_end_date=min_end_date,
-            max_end_date=max_end_date,
-            limit=limit,
-        )
-    else:
-        # Return from all servers
-        all_apps = []
-        clients = ctx.request_context.lifespan_context.clients
+    all_apps = []
+    for server_name, client in client_context.iter_clients(
+        server_name=server,
+        status=status,
+        min_date=min_date,
+        max_date=max_date,
+        min_end_date=min_end_date,
+        max_end_date=max_end_date,
+        limit=limit,
+    ):
+        try:
+            apps = client.list_applications(
+                status=status,
+                min_date=min_date,
+                max_date=max_date,
+                min_end_date=min_end_date,
+                max_end_date=max_end_date,
+                limit=limit,
+            )
+            all_apps.extend(apps)
+        except Exception as e:
+            logger.warning(
+                f"Failed to get applications from server '{server_name}': {e}"
+            )
+            continue  # Skip unreachable servers
 
-        for server_name, client in clients.items():
-            try:
-                apps = client.list_applications(
-                    status=status,
-                    min_date=min_date,
-                    max_date=max_date,
-                    min_end_date=min_end_date,
-                    max_end_date=max_end_date,
-                    limit=limit,
-                )
-                all_apps.extend(apps)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to get applications from server '{server_name}': {e}"
-                )
-                continue  # Skip unreachable servers
-
-        return all_apps
+    return all_apps
 
 
 @mcp.tool()
