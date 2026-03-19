@@ -119,6 +119,7 @@ class Config(BaseSettings):
         env_nested_delimiter="_",
         env_file=".env",
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     @classmethod
